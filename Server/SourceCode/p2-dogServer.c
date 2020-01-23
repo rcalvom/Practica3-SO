@@ -38,10 +38,20 @@ void* ListenRequest(void* args){
 
                 struct dogType *new = Malloc(sizeof(struct dogType));
                 Recv(Client->clientfd, new, sizeof(struct dogType), 0);         // Recibe la estructura del cliente.
+
+                // TODO: Mutex+ DataDogs.dat
+                // TODO: Mutex+ Hash
+
                 bool flag = IngresarRegistro(Table, new);                       // La ingresa al sistema (Archivo dataDogs.dat y historia.)
+
+                // TODO: Mutex- DataDogs.dat
+                // TODO: Mutex- Hash
+
                 Send(Client->clientfd, &flag, sizeof(flag), 0);                 // Envía confirmación al cliente si pudo ingresar el registro.
                 if(flag){
+                    // TODO: Mutex+ ServerDogs.log
                     WriteLog(1, inet_ntoa(Client->Ip.sin_addr), new->name);     // Si se pudo añadir la historia correctamente, Se muestra lo dicho en el Log.
+                    // TODO: Mutex+ ServerDogs.log
                 }               
                 Free(new);
 
@@ -54,7 +64,9 @@ void* ListenRequest(void* args){
 
                 long idRegister;
                 Recv(Client->clientfd, &idRegister, sizeof(idRegister), 0);     // Recibe el id del registro que va a buscar.
+                // TODO: Mutex+ Hash
                 bool existFile = ExisteElElemento(idRegister);                  // Analiza si esa id existe en la tabla hash.
+                // TODO: Mutex- Hash
                 Send(Client->clientfd, &existFile, sizeof(existFile), 0);       // Envía al cliente si existe o no dicha id en la tabla hash.
                 if(existFile){                                                  // Si exíste ...
                     bool answer;
@@ -93,7 +105,9 @@ void* ListenRequest(void* args){
 
                         id = Malloc(10);
                         sprintf(id, "%li", idRegister);
+                        // TODO: Mutex+ ServerDogs.logs
                         WriteLog(2, inet_ntoa(Client->Ip.sin_addr), id);        // Registra la busqueda en los Logs.                        
+                        // TODO: Mutex+ ServerDogs.logs
                         Free(id);
                         Free(data);
                     }
@@ -116,18 +130,24 @@ void* ListenRequest(void* args){
                     bool answer;
 
                     Recv(Client->clientfd, &id, sizeof(id), 0);                                     // Recibe la id del registro a eliminar.
+                    // TODO: Mutex+ Hash
                     exist = borrar(Table, id);                                                      // Intenta borrar de la tabla hash.
+                    // TODO: Mutex- Hash
 
                     if(exist != -1){                                                                // Si el registro fue borrado de la tabla hash ...                     
                         char* idChar;
                         answer = true;
 
+                        // TODO: Mutex+ DataDogs.dat
                         BorrarRegistro(id);                                                         // Borra el registro del archivo de estructuras.
+                        // TODO: Mutex- DataDogs.dat
                         Send(Client->clientfd, &answer, sizeof(answer), 0);                        
                                                                                
                         idChar = Malloc(10);
                         sprintf(idChar, "%li", id);
+                        // TODO: Mutex+ ServerDogs.log
                         WriteLog(3, inet_ntoa(Client->Ip.sin_addr), idChar);                        // Escribe el registro de la acción.
+                        // TODO: Mutex- ServerDogs.log
                         Free(idChar);
                     }else{
                         answer = false;
@@ -149,9 +169,10 @@ void* ListenRequest(void* args){
                 rName = Malloc(SIZE);
 
                 Recv(Client->clientfd, name, SIZE, 0);                              // Recibe el nombre de la mascota a buscar.
-                long cant = buscarId(Table, name);
-
+                // TODO: Mutex+ Hash
                 // TODO: Semaphore+ Res.dat
+                long cant = buscarId(Table, name);
+                // TODO: Mutex- hash
 
                 file = fopen("Res.dat", "r");
 
@@ -165,12 +186,16 @@ void* ListenRequest(void* args){
                 }
 
                 remove("Res.dat");
+                fclose(file);
+                // TODO: Semaphore- Res.dat
+                // TODO: Semaphore+ ServerDogs.dat
                 WriteLog(4, inet_ntoa(Client->Ip.sin_addr), name);                  // Escribe la acción en el Log.
+                // TODO: Semaphore- ServerDogs.dat
                 Free(name);
                 Free(rName);
-                fclose(file);
+                
 
-                // TODO: Semaphore- Res.dat
+                
 
                 sem_post(semaphore);
                 break;
