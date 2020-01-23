@@ -56,14 +56,17 @@ void* ListenRequest(void* args){
                 Recv(Client->clientfd, &idRegister, sizeof(idRegister), 0);     // Recibe el id del registro que va a buscar.
                 bool existFile = ExisteElElemento(idRegister);                  // Analiza si esa id existe en la tabla hash.
                 Send(Client->clientfd, &existFile, sizeof(existFile), 0);       // Envía al cliente si existe o no dicha id en la tabla hash.
-                if(existFile){                                                  // Si exíste....
+                if(existFile){                                                  // Si exíste ...
                     bool answer;
                     Recv(Client->clientfd, &answer, sizeof(answer), 0);         // Recibe la respuesta de si el cliente quiere abrir el archivo.
-                    if(answer){                                                 // Si la respuesta es afirmativa...
+                    if(answer){                                                 // Si la respuesta es afirmativa ...
                         FILE *file;
                         char* data, *id;
+
+                        // TODO: Semaphore+ historia.dat
+
                         file = fopen(FilePath(idRegister), "r");
-                        if(file == NULL){                                       // Si la historia clínica no exite...
+                        if(file == NULL){                                       // Si la historia clínica no exite ...
                             struct dogType* pet = FindPetById(idRegister);
                             CreateClinicHistory(idRegister, pet);               // Y cree el archivo de historia clínica.
                             Free(pet);
@@ -86,6 +89,8 @@ void* ListenRequest(void* args){
                         fwrite(data, size, 1, file);                            // La escribe en el archivo.
                         fclose(file);
                         
+                        // TODO: Semaphore- historia.dat
+
                         id = Malloc(10);
                         sprintf(id, "%li", idRegister);
                         WriteLog(2, inet_ntoa(Client->Ip.sin_addr), id);        // Registra la busqueda en los Logs.                        
@@ -145,6 +150,9 @@ void* ListenRequest(void* args){
 
                 Recv(Client->clientfd, name, SIZE, 0);                              // Recibe el nombre de la mascota a buscar.
                 long cant = buscarId(Table, name);
+
+                // TODO: Semaphore+ Res.dat
+
                 file = fopen("Res.dat", "r");
 
                 Send(Client->clientfd, &cant, sizeof(cant), 0);
@@ -161,6 +169,8 @@ void* ListenRequest(void* args){
                 Free(name);
                 Free(rName);
                 fclose(file);
+
+                // TODO: Semaphore- Res.dat
 
                 sem_post(semaphore);
                 break;

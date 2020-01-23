@@ -115,6 +115,7 @@ void WriteLog(int opcion, char* IP, char* Registro){
     }
 
     fclose(file);
+
     Free(log);
     Free(date);
 }
