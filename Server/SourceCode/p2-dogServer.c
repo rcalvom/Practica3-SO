@@ -21,8 +21,11 @@
 #define BACKLOG 32
 
 // Variables globales.
-struct HashTable *Table;
-sem_t *semaphore;
+struct HashTable *Table;                        // Tabla Hash.
+sem_t *semaphore_hash;                          // Semáforo para controlar acceso a la tabla hash.
+pthread_mutex_t mutex_dataDogs;                 // Mutex para controlar acceso al archivo de estructuras.
+pthread_mutex_t mutex_log;                      // Mutex para controlar acceso al archivo de registros.
+pthread_mutex_t mutex_res;                      // Mutex para controlar acceso al archivo de resultados de búsqueda.
 
 // Método para el hilo que se encarga de recibir datos de los clientes y ejecutar las solicitudes.
 void* ListenRequest(void* args){
@@ -34,39 +37,33 @@ void* ListenRequest(void* args){
 
         switch (option){
             case 1: {                                                           // Si la opción del cliente es Ingresar Registro.
-                sem_wait(semaphore);
 
                 struct dogType *new = Malloc(sizeof(struct dogType));
                 Recv(Client->clientfd, new, sizeof(struct dogType), 0);         // Recibe la estructura del cliente.
 
-                // TODO: Mutex+ DataDogs.dat
-                // TODO: Mutex+ Hash
-
+                pthread_mutex_lock(&mutex_dataDogs);                            // Bloquea el uso del recurso.
+                sem_wait(semaphore_hash);                                       // Se señaliza el uso de la tabla hash.
                 bool flag = IngresarRegistro(Table, new);                       // La ingresa al sistema (Archivo dataDogs.dat y historia.)
-
-                // TODO: Mutex- DataDogs.dat
-                // TODO: Mutex- Hash
+                pthread_mutex_unlock(&mutex_dataDogs);                          // Libera el uso del recurso.
+                sem_post(semaphore_hash);                                       // Se señaliza la liberación de la tabla hash.
 
                 Send(Client->clientfd, &flag, sizeof(flag), 0);                 // Envía confirmación al cliente si pudo ingresar el registro.
                 if(flag){
-                    // TODO: Mutex+ ServerDogs.log
+                    pthread_mutex_lock(&mutex_log);                             // Bloquea el uso del recurso.
                     WriteLog(1, inet_ntoa(Client->Ip.sin_addr), new->name);     // Si se pudo añadir la historia correctamente, Se muestra lo dicho en el Log.
-                    // TODO: Mutex+ ServerDogs.log
+                    pthread_mutex_unlock(&mutex_log);                           // Libera el uso del recurso.
                 }               
                 Free(new);
-
-                sem_post(semaphore);
                 break;
             }
 
             case 2: {                                                           // Si la opción del cliente es Ver Registro.
-                sem_wait(semaphore);
 
                 long idRegister;
                 Recv(Client->clientfd, &idRegister, sizeof(idRegister), 0);     // Recibe el id del registro que va a buscar.
-                // TODO: Mutex+ Hash
+                sem_wait(semaphore_hash);                                       // Se señaliza el uso de la tabla hash.
                 bool existFile = ExisteElElemento(idRegister);                  // Analiza si esa id existe en la tabla hash.
-                // TODO: Mutex- Hash
+                sem_post(semaphore_hash);                                       // Se señaliza la liberación de la tabla hash.
                 Send(Client->clientfd, &existFile, sizeof(existFile), 0);       // Envía al cliente si existe o no dicha id en la tabla hash.
                 if(existFile){                                                  // Si exíste ...
                     bool answer;
@@ -79,7 +76,9 @@ void* ListenRequest(void* args){
 
                         file = fopen(FilePath(idRegister), "r");
                         if(file == NULL){                                       // Si la historia clínica no exite ...
+                            pthread_mutex_lock(&mutex_dataDogs);                // Bloquea el uso del recurso.
                             struct dogType* pet = FindPetById(idRegister);
+                            pthread_mutex_unlock(&mutex_dataDogs);              // Libera el uso del recurso.
                             CreateClinicHistory(idRegister, pet);               // Y cree el archivo de historia clínica.
                             Free(pet);
                             file = fopen(FilePath(idRegister), "r");
@@ -105,19 +104,17 @@ void* ListenRequest(void* args){
 
                         id = Malloc(10);
                         sprintf(id, "%li", idRegister);
-                        // TODO: Mutex+ ServerDogs.logs
+                        pthread_mutex_lock(&mutex_log);                         // Bloquea el uso del recurso.
                         WriteLog(2, inet_ntoa(Client->Ip.sin_addr), id);        // Registra la busqueda en los Logs.                        
-                        // TODO: Mutex+ ServerDogs.logs
+                        pthread_mutex_unlock(&mutex_log);                       // Libera el uso del recurso.
                         Free(id);
                         Free(data);
                     }
                 }
 
-                sem_post(semaphore);
                 break;
             }
             case 3: {                                                                               // Si la opción del cliente es Borrar Registro.
-                sem_wait(semaphore);
 
                 long NumRegisters;
                 bool flag;
@@ -130,24 +127,24 @@ void* ListenRequest(void* args){
                     bool answer;
 
                     Recv(Client->clientfd, &id, sizeof(id), 0);                                     // Recibe la id del registro a eliminar.
-                    // TODO: Mutex+ Hash
+                    sem_wait(semaphore_hash);                                                       // Se señaliza el uso de la tabla hash.
                     exist = borrar(Table, id);                                                      // Intenta borrar de la tabla hash.
-                    // TODO: Mutex- Hash
+                    sem_post(semaphore_hash);                                                       // Se señaliza la liberación de la tabla hash.
 
                     if(exist != -1){                                                                // Si el registro fue borrado de la tabla hash ...                     
                         char* idChar;
                         answer = true;
 
-                        // TODO: Mutex+ DataDogs.dat
+                        pthread_mutex_lock(&mutex_dataDogs);                                        // Bloquea el uso del recurso.
                         BorrarRegistro(id);                                                         // Borra el registro del archivo de estructuras.
-                        // TODO: Mutex- DataDogs.dat
+                        pthread_mutex_unlock(&mutex_dataDogs);                                      // Libera el uso del recurso.
                         Send(Client->clientfd, &answer, sizeof(answer), 0);                        
                                                                                
                         idChar = Malloc(10);
                         sprintf(idChar, "%li", id);
-                        // TODO: Mutex+ ServerDogs.log
+                        pthread_mutex_lock(&mutex_log);                                             // Bloquea el uso del recurso.
                         WriteLog(3, inet_ntoa(Client->Ip.sin_addr), idChar);                        // Escribe el registro de la acción.
-                        // TODO: Mutex- ServerDogs.log
+                        pthread_mutex_unlock(&mutex_log);                                           // Libera el uso del recurso.
                         Free(idChar);
                     }else{
                         answer = false;
@@ -155,13 +152,11 @@ void* ListenRequest(void* args){
                     }                                                                               
                 }
 
-                sem_post(semaphore);
                 break;
             }
             case 4: {                                                               // Si la opción del cliente es Buscar Registro.
-                sem_wait(semaphore);
 
-                FILE* file;
+                FILE *file;
                 char *name, *rName;
                 long rId;
 
@@ -169,13 +164,11 @@ void* ListenRequest(void* args){
                 rName = Malloc(SIZE);
 
                 Recv(Client->clientfd, name, SIZE, 0);                              // Recibe el nombre de la mascota a buscar.
-                // TODO: Mutex+ Hash
-                // TODO: Semaphore+ Res.dat
+                sem_wait(semaphore_hash);                                           // Se señaliza el uso de la tabla hash.
+                pthread_mutex_lock(&mutex_res);                                     // Bloquea el uso del recurso.
                 long cant = buscarId(Table, name);
-                // TODO: Mutex- hash
-
+                sem_post(semaphore_hash);                                           // Se señaliza la liberación de la tabla hash.
                 file = fopen("Res.dat", "r");
-
                 Send(Client->clientfd, &cant, sizeof(cant), 0);
 
                 for(long i = 0; i < cant; i++){                                     // Cada coincidencia encontrada.
@@ -184,20 +177,16 @@ void* ListenRequest(void* args){
                     fread(rName, SIZE, 1, file);
                     Send(Client->clientfd, rName, SIZE, 0);
                 }
-
+                if(file != NULL){
+                    fclose(file);
+                }
                 remove("Res.dat");
-                fclose(file);
-                // TODO: Semaphore- Res.dat
-                // TODO: Semaphore+ ServerDogs.dat
+                pthread_mutex_unlock(&mutex_res);                                   // Libera el uso del recurso.
+                pthread_mutex_lock(&mutex_log);                                     // Bloquea el uso del recurso.
                 WriteLog(4, inet_ntoa(Client->Ip.sin_addr), name);                  // Escribe la acción en el Log.
-                // TODO: Semaphore- ServerDogs.dat
+                pthread_mutex_unlock(&mutex_log);                                   // Libera el uso del recurso.
                 Free(name);
                 Free(rName);
-                
-
-                
-
-                sem_post(semaphore);
                 break;
             }
         }
@@ -212,8 +201,11 @@ void *ListenExit(void *client){
         scanf("%s", exitKey);                                                       // Lee del teclado una cadena.
         toUpperCase(exitKey);
         if(equals(exitKey, "EXIT")){                                                // Si la cadena es "EXIT".
-            sem_close(semaphore);
+            sem_close(semaphore_hash);                                              // Libera recursos.
             sem_unlink("S");
+            pthread_mutex_destroy(&mutex_dataDogs);
+            pthread_mutex_destroy(&mutex_log);
+            pthread_mutex_destroy(&mutex_res);
             SaveTable(Table);
             exit(EXIT_SUCCESS);                                                     // Sale del programa sin enviar error.
         }
@@ -228,7 +220,7 @@ int main(){
     pthread_t ListenThread;
     struct Client *clientsConnected[BACKLOG];
 
-    sem_close(semaphore);                                                               // Se eliminan posibles instancias del semáforo.
+    sem_close(semaphore_hash);                                                          // Se eliminan posibles instancias del semáforo.
     sem_unlink("S");
     Table = CreateTable();                                                              // Se crea o carga la tabla hash.
     len = sizeof(struct sockaddr_in);
@@ -251,7 +243,10 @@ int main(){
     Listen(serverfd, BACKLOG);                                                          // Se pone el servidor a la escucha de solicitudes entrantes.
 
     pthread_create(&ListenThread, NULL, ListenExit, NULL);                              // Se crea un hilo que se encarga de esperar salida por parte del usuario.
-    semaphore = sem_open("S", O_CREAT, 0700, 1);                                        // Inicializa el semáforo que ayudará a evitar conciciones de carrera en los archivos de datos.
+    semaphore_hash = sem_open("S", O_CREAT, 0700, 1);                                   // Inicializa el semáforo que ayudará a evitar conciciones de carrera en los archivos de datos.
+    pthread_mutex_init(&mutex_dataDogs, NULL);                                          // Inicializa el mutex del archivo de estructuras.
+    pthread_mutex_init(&mutex_log, NULL);                                               // Inicializa el mutex del archivo de registros.
+    pthread_mutex_init(&mutex_res, NULL);                                               // Inicializa el mutex del archivo de resultados de búsqueda.
 
     CurrentUsers = 0;
 

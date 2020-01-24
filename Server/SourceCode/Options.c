@@ -10,14 +10,12 @@
 bool IngresarRegistro(struct HashTable* tabla, struct dogType *new){
     long id;
     FILE *dataDogs;
-
     dataDogs = fopen("dataDogs.dat", "a");
     id = insertElement(tabla, new->name);
     fwrite(&id, sizeof(long), 1, dataDogs);                                     // Se escribe en el archivo la Id correspondiente.
     fwrite(new, sizeof(struct dogType), 1, dataDogs);                           // Se escriben los datos de la mascota anteriormente solicitados en el archivo.
     CreateClinicHistory(id, new);                                               // Se crea el archivo de historia clínica correspondiente.
     fclose(dataDogs);
-
     return true;
 }
 
