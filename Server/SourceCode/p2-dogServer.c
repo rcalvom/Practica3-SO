@@ -26,6 +26,8 @@ sem_t *semaphore_hash;                          // Semáforo para controlar acce
 pthread_mutex_t mutex_dataDogs;                 // Mutex para controlar acceso al archivo de estructuras.
 pthread_mutex_t mutex_log;                      // Mutex para controlar acceso al archivo de registros.
 pthread_mutex_t mutex_res;                      // Mutex para controlar acceso al archivo de resultados de búsqueda.
+int pipefd[2], erroresPipe;                     // Tuberia para la sincronizacion de las historias clinicas
+long HistoriasAbiertas[32];
 
 // Método para el hilo que se encarga de recibir datos de los clientes y ejecutar las solicitudes.
 void* ListenRequest(void* args){
@@ -70,9 +72,27 @@ void* ListenRequest(void* args){
                     Recv(Client->clientfd, &answer, sizeof(answer), 0);         // Recibe la respuesta de si el cliente quiere abrir el archivo.
                     if(answer){                                                 // Si la respuesta es afirmativa ...
                         FILE *file;
-                        char* data, *id;
+                        char* data, *id, a;
 
                         // TODO: Semaphore+ historia.dat
+                        bool Disponible = true;
+                        do {
+                            Disponible = true;
+                            for(int i = 0; i<32; i++){
+                                if(HistoriasAbiertas[i] == idRegister){
+                                    Disponible = false;
+                                }
+                            }
+                        }while(!Disponible);
+
+                        erroresPipe = read(pipefd[0], &a, 1);
+                        for(int i = 0; i<32; i++){
+                            if(HistoriasAbiertas[i] == -1){
+                                HistoriasAbiertas[i] = idRegister;
+                                break;
+                            }
+                        }
+                        erroresPipe = write(pipefd[1], &a, 1);
 
                         file = fopen(FilePath(idRegister), "r");
                         if(file == NULL){                                       // Si la historia clínica no exite ...
@@ -101,6 +121,14 @@ void* ListenRequest(void* args){
                         fclose(file);
                         
                         // TODO: Semaphore- historia.dat
+                        erroresPipe = read(pipefd[0], &a, 1);
+                        for(int i = 0; i<32; i++){
+                            if(HistoriasAbiertas[i] == idRegister){
+                                HistoriasAbiertas[i] = -1;
+                                break;
+                            }
+                        }
+                        erroresPipe = write(pipefd[1], &a, 1);
 
                         id = Malloc(10);
                         sprintf(id, "%li", idRegister);
@@ -219,7 +247,15 @@ int main(){
     socklen_t len;                                 
     pthread_t ListenThread;
     struct Client *clientsConnected[BACKLOG];
-
+    pipe(pipefd);                                                                   //1 es escritura 0 es lectura 
+    if(pipefd == NULL){
+        perror("No se pudo crear la tuberia.");
+        exit(-1);
+    }
+    erroresPipe = write(pipefd[1], "a", 1);
+    for(int i = 0; i<32; i++){
+        HistoriasAbiertas[i] = -1;
+    }
     sem_close(semaphore_hash);                                                          // Se eliminan posibles instancias del semáforo.
     sem_unlink("S");
     Table = CreateTable();                                                              // Se crea o carga la tabla hash.

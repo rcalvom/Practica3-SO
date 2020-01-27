@@ -108,15 +108,24 @@ int main(){
                         char *data;
                         long size;
                         Recv(clientfd, &size, sizeof(size), 0);                             // Recibe el tamaño del archivo.
-                        file = fopen("Registro.dat","w+");
+                        char* fileName = Malloc(50);
+                        char* idChar = Malloc(10);
+                        char* bash = Malloc(60);
+                        strcat(fileName,"Registro");
+                        sprintf(idChar,"%li",id);
+                        strcat(fileName,idChar);
+                        strcat(fileName,".dat");
+                        strcat(bash,"nano ");
+                        strcat(bash,fileName);
+                        file = fopen(fileName,"w+");
                         data = Malloc(size + 1);
                         Recv(clientfd,data,size,0);                                         // Recibe el archivo.
                         fwrite(data, size, 1, file);
                         fclose(file);
                         Free(data);
-                        system("nano Registro.dat");                                        // Abre el archivo con el comando bash "nano".
+                        system(bash);                                        // Abre el archivo con el comando bash "nano".
                         InitConsole();
-                        file = fopen("Registro.dat", "r");
+                        file = fopen(fileName, "r");
                         fseek(file, 0L, SEEK_END);
                         size = ftell(file);
                         rewind(file);
@@ -126,7 +135,10 @@ int main(){
                         Send(clientfd, data, size, 0);                                      // Envía el archivo modificado.
                         Free(data);
                         fclose(file);
-                        remove("Registro.dat");                                             // Elimina el archivo de la maquina cliente.
+                        remove(fileName);                                             // Elimina el archivo de la maquina cliente.
+                        Free(fileName);
+                        Free(idChar);
+                        Free(bash);
                     }                   
                 }else{
                     printw("El registro con la Id dada no existe en el sistema.\n");
