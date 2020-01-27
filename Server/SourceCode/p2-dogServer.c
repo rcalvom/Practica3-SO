@@ -76,67 +76,67 @@ void* ListenRequest(void* args){
 
                         // TODO: Semaphore+ historia.dat
                         bool Disponible = true;
-                        do {
-                            Disponible = true;
-                            for(int i = 0; i<32; i++){
-                                if(HistoriasAbiertas[i] == idRegister){
-                                    Disponible = false;
-                                }
-                            }
-                        }while(!Disponible);
-
-                        erroresPipe = read(pipefd[0], &a, 1);
-                        for(int i = 0; i<32; i++){
-                            if(HistoriasAbiertas[i] == -1){
-                                HistoriasAbiertas[i] = idRegister;
-                                break;
-                            }
-                        }
-                        erroresPipe = write(pipefd[1], &a, 1);
-
-                        file = fopen(FilePath(idRegister), "r");
-                        if(file == NULL){                                       // Si la historia clínica no exite ...
-                            pthread_mutex_lock(&mutex_dataDogs);                // Bloquea el uso del recurso.
-                            struct dogType* pet = FindPetById(idRegister);
-                            pthread_mutex_unlock(&mutex_dataDogs);              // Libera el uso del recurso.
-                            CreateClinicHistory(idRegister, pet);               // Y cree el archivo de historia clínica.
-                            Free(pet);
-                            file = fopen(FilePath(idRegister), "r");
-                        }
-                        
-                        fseek(file, 0L, SEEK_END);
-                        long size = ftell(file);
-                        rewind(file);
-                        Send(Client->clientfd, &size, sizeof(size), 0);         // Envía el tamaño del archivo a recibir.
-                        data = Malloc(size + 1);
-                        fread(data, size, 1, file);
-                        Send(Client->clientfd, data, size, 0);                  // Envía la historia clinica.
-                        fclose(file);
-                        Free(data); 
-                        Recv(Client->clientfd, &size, sizeof(size), 0);         // Luego que el usuario edite la historia. Recibe el tamaño de la historia modificada.
-                        data = Malloc(size + 1);
-                        Recv(Client->clientfd, data, size, 0);                  // Recibe la historia nueva.
-                        file = fopen(FilePath(idRegister), "w+");        
-                        fwrite(data, size, 1, file);                            // La escribe en el archivo.
-                        fclose(file);
-                        
-                        // TODO: Semaphore- historia.dat
-                        erroresPipe = read(pipefd[0], &a, 1);
                         for(int i = 0; i<32; i++){
                             if(HistoriasAbiertas[i] == idRegister){
-                                HistoriasAbiertas[i] = -1;
-                                break;
+                                Disponible = false;
                             }
                         }
-                        erroresPipe = write(pipefd[1], &a, 1);
+                        Send(Client->clientfd, &Disponible, sizeof(Disponible), 0);
+                        if(Disponible){
+                            erroresPipe = read(pipefd[0], &a, 1);
+                            for(int i = 0; i<32; i++){
+                                if(HistoriasAbiertas[i] == -1){
+                                    HistoriasAbiertas[i] = idRegister;
+                                    break;
+                                }
+                            }
+                            erroresPipe = write(pipefd[1], &a, 1);
+                            char *filePath = FilePath(idRegister);
+                            file = fopen(filePath, "r");
+                            if(file == NULL){                                       // Si la historia clínica no exite ...
+                                pthread_mutex_lock(&mutex_dataDogs);                // Bloquea el uso del recurso.
+                                struct dogType* pet = FindPetById(idRegister);
+                                pthread_mutex_unlock(&mutex_dataDogs);              // Libera el uso del recurso.
+                                CreateClinicHistory(idRegister, pet);               // Y cree el archivo de historia clínica.
+                                Free(pet);
+                                file = fopen(filePath, "r");
+                            }
+                            
+                            fseek(file, 0L, SEEK_END);
+                            long size = ftell(file);
+                            rewind(file);
+                            Send(Client->clientfd, &size, sizeof(size), 0);         // Envía el tamaño del archivo a recibir.
+                            data = Malloc(size + 1);
+                            fread(data, size, 1, file);
+                            Send(Client->clientfd, data, size, 0);                  // Envía la historia clinica.
+                            fclose(file);
+                            Free(data); 
+                            Recv(Client->clientfd, &size, sizeof(size), 0);         // Luego que el usuario edite la historia. Recibe el tamaño de la historia modificada.
+                            data = Malloc(size + 1);
+                            Recv(Client->clientfd, data, size, 0);                  // Recibe la historia nueva.
+                            file = fopen(filePath, "w+");        
+                            fwrite(data, size, 1, file);                            // La escribe en el archivo.
+                            fclose(file);
+                            
+                            // TODO: Semaphore- historia.dat
+                            erroresPipe = read(pipefd[0], &a, 1);
+                            for(int i = 0; i<32; i++){
+                                if(HistoriasAbiertas[i] == idRegister){
+                                    HistoriasAbiertas[i] = -1;
+                                    break;
+                                }
+                            }
+                            erroresPipe = write(pipefd[1], &a, 1);
 
-                        id = Malloc(10);
-                        sprintf(id, "%li", idRegister);
-                        pthread_mutex_lock(&mutex_log);                         // Bloquea el uso del recurso.
-                        WriteLog(2, inet_ntoa(Client->Ip.sin_addr), id);        // Registra la busqueda en los Logs.                        
-                        pthread_mutex_unlock(&mutex_log);                       // Libera el uso del recurso.
-                        Free(id);
-                        Free(data);
+                            id = Malloc(10);
+                            sprintf(id, "%li", idRegister);
+                            pthread_mutex_lock(&mutex_log);                         // Bloquea el uso del recurso.
+                            WriteLog(2, inet_ntoa(Client->Ip.sin_addr), id);        // Registra la busqueda en los Logs.                        
+                            pthread_mutex_unlock(&mutex_log);                       // Libera el uso del recurso.
+                            Free(id);
+                            Free(data);
+                            Free(filePath);
+                        }
                     }
                 }
 

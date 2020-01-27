@@ -84,7 +84,7 @@ int main(){
                 break;
             }
             case 2:{                                                                        // Si se desea ver un registro.
-                bool existFile, request = false;
+                bool existFile, request = false, FileIsAvailable;
                 char clientAnswer;
                 Send(clientfd, &MenuOption, sizeof(MenuOption), 0);                         // Se envía la opción del menú.    
                 long id = VerRegistro();
@@ -104,41 +104,46 @@ int main(){
                     Send(clientfd, &request, sizeof(request), 0);                           // Envía un booleano que indica si el usuario quiere ver el registro.
 
                     if(request){
-                        FILE *file;
-                        char *data;
-                        long size;
-                        Recv(clientfd, &size, sizeof(size), 0);                             // Recibe el tamaño del archivo.
-                        char* fileName = Malloc(50);
-                        char* idChar = Malloc(10);
-                        char* bash = Malloc(60);
-                        strcat(fileName,"Registro");
-                        sprintf(idChar,"%li",id);
-                        strcat(fileName,idChar);
-                        strcat(fileName,".dat");
-                        strcat(bash,"nano ");
-                        strcat(bash,fileName);
-                        file = fopen(fileName,"w+");
-                        data = Malloc(size + 1);
-                        Recv(clientfd,data,size,0);                                         // Recibe el archivo.
-                        fwrite(data, size, 1, file);
-                        fclose(file);
-                        Free(data);
-                        system(bash);                                        // Abre el archivo con el comando bash "nano".
-                        InitConsole();
-                        file = fopen(fileName, "r");
-                        fseek(file, 0L, SEEK_END);
-                        size = ftell(file);
-                        rewind(file);
-                        Send(clientfd, &size, sizeof(size), 0);                             // Envia el tamaño del archivo modificado.
-                        data = Malloc(size +1 );
-                        fread(data, size, 1, file);
-                        Send(clientfd, data, size, 0);                                      // Envía el archivo modificado.
-                        Free(data);
-                        fclose(file);
-                        remove(fileName);                                             // Elimina el archivo de la maquina cliente.
-                        Free(fileName);
-                        Free(idChar);
-                        Free(bash);
+                        Recv(clientfd, &FileIsAvailable, sizeof(FileIsAvailable), 0);
+                        if(FileIsAvailable){
+                            FILE *file;
+                            char *data;
+                            long size;
+                            Recv(clientfd, &size, sizeof(size), 0);                             // Recibe el tamaño del archivo.
+                            char* fileName = Malloc(50);
+                            char* idChar = Malloc(10);
+                            char* bash = Malloc(60);
+                            strcat(fileName,"Registro");
+                            sprintf(idChar,"%li",id);
+                            strcat(fileName,idChar);
+                            strcat(fileName,".dat");
+                            strcat(bash,"nano ");
+                            strcat(bash,fileName);
+                            file = fopen(fileName,"w+");
+                            data = Malloc(size + 1);
+                            Recv(clientfd,data,size,0);                                         // Recibe el archivo.
+                            fwrite(data, size, 1, file);
+                            fclose(file);
+                            Free(data);
+                            system(bash);                                        // Abre el archivo con el comando bash "nano".
+                            InitConsole();
+                            file = fopen(fileName, "r");
+                            fseek(file, 0L, SEEK_END);
+                            size = ftell(file);
+                            rewind(file);
+                            Send(clientfd, &size, sizeof(size), 0);                             // Envia el tamaño del archivo modificado.
+                            data = Malloc(size +1 );
+                            fread(data, size, 1, file);
+                            Send(clientfd, data, size, 0);                                      // Envía el archivo modificado.
+                            Free(data);
+                            fclose(file);
+                            remove(fileName);                                             // Elimina el archivo de la maquina cliente.
+                            Free(fileName);
+                            Free(idChar);
+                            Free(bash);
+                        } else {
+                            printw("\n\nEl archivo esta siendo editado por otro usuario\n");
+                        }
                     }                   
                 }else{
                     printw("El registro con la Id dada no existe en el sistema.\n");

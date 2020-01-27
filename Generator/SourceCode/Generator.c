@@ -30,6 +30,8 @@ int main(int argc, char* argv[]){
         perror("No se encontro el archivo de nombres.\n");
         exit(EXIT_FAILURE);
     }
+    system("mkdir ../Server/HashNodes");
+    system("mkdir ../Server/historias");
 
     readFile(AllNames, names, SIZE, NAMES);
     fclose(names);
